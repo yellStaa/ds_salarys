@@ -1,0 +1,15 @@
+.vscode/
+.venv/
+__pycache__/
+
+/dist
+
+
+**.csv
+**.json
+**.xlsx
+**.jpeg
+**.zip
+
+.DS_Store
+.env

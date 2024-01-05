@@ -1,0 +1,63 @@
+stages:
+  - dev-build
+  - release
+  - build
+
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  USER_GROUP: "${USER_GROUP}"
+  CONTAINER_NAME: "${CONTAINER_NAME}"
+  PORT: "81:81"
+
+prod-release:
+  stage: release
+  image: devopshepsiburada/gitlab-mr
+  when: manual
+  allow_failure: false
+  script:
+    - python3 /app/gitlab-mr.py
+  tags:
+    - k8s
+  only:
+    - master
+
+build:
+  stage: build
+  image: docker:19.03.12
+  when: manual
+  services:
+    - docker:19.03.12-dind
+  tags:
+    - k8s
+  before_script:
+    - docker info
+    - docker login --username $DOCKERHUB_USERNAME --password $DOCKERHUB_PASSWORD
+    - cat ${SERVICE_ACCOUNT_KEY_PATH_PROD} > hb-ds-prod-key.json
+  script:
+    - docker build -t gitlab.hepsiburada.com:5050/${USER_GROUP}/${CI_PROJECT_NAME}:${CI_JOB_ID} .
+    - echo $GOOGLE_CLOUD_ACCOUNT | docker login -u _json_key --password-stdin https://eu.gcr.io
+    - docker tag gitlab.hepsiburada.com:5050/${USER_GROUP}/${CI_PROJECT_NAME}:${CI_JOB_ID} eu.gcr.io/hb-datascience-prod/${CI_PROJECT_NAME}:latest
+    - docker push eu.gcr.io/hb-datascience-prod/${CI_PROJECT_NAME}:latest
+  only:
+    - prod-release
+
+dev-build:
+  stage: dev-build
+  image: docker:19.03.12
+  when: manual
+  services:
+    - docker:19.03.12-dind
+  tags:
+    - k8s
+  before_script:
+    - docker info
+    - docker login --username $DOCKERHUB_USERNAME --password $DOCKERHUB_PASSWORD
+    - cat ${SERVICE_ACCOUNT_KEY_PATH_PROD} > hb-ds-prod-key.json
+  script:
+    - docker build --no-cache -t gitlab.hepsiburada.com:5050/${USER_GROUP}/${CI_PROJECT_NAME}:${CI_JOB_ID} .
+    - echo $GOOGLE_CLOUD_ACCOUNT | docker login -u _json_key --password-stdin https://eu.gcr.io
+    - docker tag gitlab.hepsiburada.com:5050/${USER_GROUP}/${CI_PROJECT_NAME}:${CI_JOB_ID} eu.gcr.io/hb-datascience-prod/${CI_PROJECT_NAME}:dev_latest
+    - docker push eu.gcr.io/hb-datascience-prod/${CI_PROJECT_NAME}:dev_latest
+  only:
+    - master
